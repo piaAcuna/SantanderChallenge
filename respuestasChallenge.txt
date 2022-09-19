@@ -1,0 +1,119 @@
+
+Basada en la petición cree la tabla de hechos Hechos_Loggin, cree dos tablas principales Dimension_Actividad_diaria y Dimension_Segmento_Usuario,
+luego las otras tablas dimensionales Dimension_Usuarios, Dimension_Sesion_Usuario. separé los campos en sus respectivas tablas respecto a sus IDs. 
+Desde la tabla Dimension_Segmento_Usuario cree DEVICE_ID y CRASH_DETECTION_ID y cree dos nuevas tablas de dimensiones; hice lo mismo para 
+Dimension_Actividad_diaria, cree DATE_ID y ACTIVITY_DESCRIPTION_ID todo esto para poderdividir el cubo en las tablas correspondientes a los campos
+de la tabla original y también a más campos que se fueron incorporando al momento de
+crear el cubo.
+Usaría BigQuery, si bien no es lo más eficiente para este tipo de modelos, mantiene los datos cifrados,tiene la ventaja de que es escalable, se paga por
+lo que se usa, se puede usar Data Studio para poder crear los informes 
+
+
+Ejercicio 2:
+
+---------------------
+CREATE TABLE IF NOT EXISTS pruebachallenge.Hechos_Loggin
+AS
+SELECT EVENT_ID , USER_ID,SEGMENT_ID,SESSION_ID
+FROM `trusty-solution-341713.pruebachallenge.LogueoUsuariosHomeBanking`
+
+ALTER TABLE pruebachallenge.Hechos_Loggin
+ADD COLUMN TOTAL_USER INTEGER;
+--------------------------
+CREATE TABLE IF NOT EXISTS pruebachallenge.Dimension_Actividad_diaria
+AS
+SELECT EVENT_ID, EVENT_DESCRIPTION,SERVER_TIME
+FROM `trusty-solution-341713.pruebachallenge.LogueoUsuariosHomeBanking`
+
+ALTER TABLE pruebachallenge.Dimension_Actividad_diaria
+ADD COLUMN ACTIVITY_DESCRIPTION_ID INTEGER,
+ADD COLUMN DATE_ID INTEGER;
+----------------------
+CREATE TABLE IF NOT EXISTS pruebachallenge.Dimension_Segmento_Usuario
+AS
+SELECT SEGMENT_ID,SEGMENT_DESCRIPTION
+FROM `trusty-solution-341713.pruebachallenge.LogueoUsuariosHomeBanking`
+
+ALTER TABLE pruebachallenge.Dimension_Segmento_Usuario
+ADD COLUMN DEVICE_ID INTEGER,
+ADD COLUMN CRASH_DETECTION_ID INTEGER;
+---------------
+CREATE TABLE IF NOT EXISTS pruebachallenge.Dimension_Usuarios
+AS
+SELECT USER_ID,USER_CITY
+FROM `trusty-solution-341713.pruebachallenge.LogueoUsuariosHomeBanking`
+---------------
+CREATE TABLE IF NOT EXISTS pruebachallenge.Dimension_Sesion_Usuario
+AS
+SELECT SESSION_ID,TIME_SPENT
+FROM `trusty-solution-341713.pruebachallenge.LogueoUsuariosHomeBanking`
+-------------
+CREATE TABLE IF NOT EXISTS pruebachallenge.Dim_Date
+AS
+SELECT DATE_ID INTEGER
+FROM `trusty-solution-341713.pruebachallenge.Dimension_Actividad_diaria`
+
+ALTER TABLE pruebachallenge.Dim_Date
+ADD COLUMN YEAR_USER TIMESTAMP,
+ADD COLUMN MONTH_USER TIMESTAMP;
+--------------
+CREATE TABLE IF NOT EXISTS pruebachallenge.Dim_Tipo_de_Actividad
+AS
+SELECT ACTIVITY_DESCRIPTION_ID
+FROM `trusty-solution-341713.pruebachallenge.Dimension_Actividad_diaria`
+
+ALTER TABLE pruebachallenge.Dim_Tipo_de_Actividad
+ADD COLUMN LOGGIN INTEGER,
+ADD COLUMN OTHER_ACTIVITY INTEGER;
+----------------
+CREATE TABLE IF NOT EXISTS pruebachallenge.Dim_Device
+AS
+SELECT seg.DEVICE_ID, user.DEVICE_MOBILE, user.DEVICE_OS, user.DEVICE_BROWSER
+FROM `trusty-solution-341713.pruebachallenge.Dimension_Segmento_Usuario` seg
+JOIN `trusty-solution-341713.pruebachallenge.LogueoUsuariosHomeBanking` user 
+  ON seg.SEGMENT_ID =user.SEGMENT_ID
+
+-----------
+CREATE TABLE IF NOT EXISTS pruebachallenge.Dim_Mensaje_error
+AS
+SELECT seg.CRASH_DETECTION_ID, user.CRASH_DETECTION
+FROM `trusty-solution-341713.pruebachallenge.Dimension_Segmento_Usuario` seg
+JOIN`trusty-solution-341713.pruebachallenge.LogueoUsuariosHomeBanking` user
+  ON seg.SEGMENT_ID =user.SEGMENT_ID
+
+
+Ejercicio 3:
+--------
+SELECT ses.TIME_SPENT, act.SERVER_TIME, tipAct.OTHER_ACTIVITY, loggin.USER_ID
+FROM `trusty-solution-341713.pruebachallenge.Dimension_Sesion_Usuario` ses 
+JOIN `trusty-solution-341713.pruebachallenge.Hechos_Loggin` loggin 
+  ON loggin.SESSION_ID=ses.SESSION_ID
+JOIN `trusty-solution-341713.pruebachallenge.Dimension_Actividad_diaria` act 
+  ON loggin.EVENT_ID=act.EVENT_ID
+JOIN `trusty-solution-341713.pruebachallenge.Dim_Tipo_de_Actividad` tipAct 
+  ON act.ACTIVITY_DESCRIPTION_ID=tipAct.ACTIVITY_DESCRIPTION_ID 
+WHERE 
+  ses.TIME_SPENT > 300 
+  AND tipAct.OTHER_ACTIVITY != 0 
+  AND act.SERVER_TIME = timestamp_sub(current_timestamp, INTERVAL 2 DAY) 
+
+--------
+
+
+SELECT loggin.USER_ID, COUNT(tipAct.LOGGIN) AS AMOUNT_OF_LOGGING
+FROM `trusty-solution-341713.pruebachallenge.Hechos_Loggin` loggin 
+JOIN `trusty-solution-341713.pruebachallenge.Dimension_Actividad_diaria` act 
+  ON loggin.EVENT_ID=act.EVENT_ID
+JOIN `trusty-solution-341713.pruebachallenge.Dim_Tipo_de_Actividad` tipAct 
+  ON act.ACTIVITY_DESCRIPTION_ID=tipAct.ACTIVITY_DESCRIPTION_ID 
+WHERE 
+  tipAct.LOGGIN != 0 
+  AND act.SERVER_TIME = timestamp_sub(current_timestamp, INTERVAL 30 DAY)
+GROUP BY loggin.USER_ID
+ORDER BY AMOUNT_OF_LOGGING DESC LIMIT 10;
+
+
+
+
+
+
